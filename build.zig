@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
 
     // pgzx_pgsys module: C bindings to Postgres
     const pgzx_pgsys = blk: {
-        const module = b.addModule("pgzx_pgsys", .{
+        const module = b.createModule(.{
             .root_source_file = b.path("./src/pgzx/c.zig"),
             .target = target,
             .optimize = optimize,
@@ -64,9 +64,11 @@ pub fn build(b: *std.Build) void {
     const node_tags_src = blk: {
         const tool = b.addExecutable(.{
             .name = "gennodetags",
-            .root_source_file = b.path("./tools/gennodetags/main.zig"),
-            .target = b.graph.host,
-            .link_libc = true,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("./tools/gennodetags/main.zig"),
+                .target = b.graph.host,
+                .link_libc = true,
+            }),
         });
         tool.root_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeServerDir() });
         tool.root_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeDir() });
@@ -78,7 +80,7 @@ pub fn build(b: *std.Build) void {
     // pgzx: main project module.
     // This module re-exports pgzx_pgsys, other generated modules, and utility functions.
     const pgzx = blk: {
-        const module = b.addModule("pgzx", .{
+        const module = b.createModule(.{
             .root_source_file = b.path("./src/pgzx.zig"),
             .target = target,
             .optimize = optimize,
@@ -136,7 +138,7 @@ pub fn build(b: *std.Build) void {
         const tests = pgbuild.addInstallExtension(.{
             .name = "pgzx_unit",
             .version = .{ .major = 0, .minor = 1 },
-            .root_source_file = b.path("src/testing.zig"),
+            .source_file = b.path("src/testing.zig"),
             .root_dir = "src/testing",
             .link_libc = true,
             .link_allow_shlib_undefined = true,

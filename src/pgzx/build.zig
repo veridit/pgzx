@@ -10,7 +10,7 @@ std_build: *std.Build,
 paths: Paths,
 options: struct {
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.Mode,
+    optimize: std.builtin.OptimizeMode,
 },
 debug: DebugOptions,
 
@@ -61,7 +61,7 @@ pub const Project = struct {
         version: ExtensionVersion,
 
         root_dir: []const u8,
-        root_source_file: ?[]const u8 = null,
+        source_file: ?[]const u8 = null,
 
         extension_dir: ?[]const u8 = null,
     };
@@ -77,10 +77,10 @@ pub const Project = struct {
         });
 
         var proj_config = c;
-        if (c.root_source_file == null) {
+        if (c.source_file == null) {
             const file_name = std.fmt.allocPrint(b.allocator, "{s}.zig", .{c.name}) catch unreachable;
             const src: []u8 = std.fs.path.join(b.allocator, &[_][]const u8{ c.root_dir, file_name }) catch unreachable;
-            proj_config.root_source_file = src;
+            proj_config.source_file = src;
         }
         if (c.extension_dir == null) {
             proj_config.extension_dir = "./extension/";
@@ -93,10 +93,10 @@ pub const Project = struct {
                 .pgzx = pgbuild.modules.pgzx(),
             },
             .config = proj_config,
-            .options = std.StringArrayHashMapUnmanaged(*Step.Options).init(b.allocator, &.{}, &.{}) catch unreachable,
-            .includePaths = std.ArrayList(LazyPath).init(b.allocator),
-            .libraryPaths = std.ArrayList(LazyPath).init(b.allocator),
-            .cSourcesFiles = std.ArrayList(AddCSourceFilesOptions).init(b.allocator),
+            .options = .{},
+            .includePaths = .{},
+            .libraryPaths = .{},
+            .cSourcesFiles = .{},
         };
     }
 
@@ -105,7 +105,7 @@ pub const Project = struct {
             .name = proj.config.name,
             .version = proj.config.version,
             .root_dir = proj.config.root_dir,
-            .root_source_file = proj.build.path(proj.config.root_source_file.?),
+            .source_file = proj.build.path(proj.config.source_file.?),
         });
         var mod = lib.root_module;
         mod.addImport("pgzx", proj.deps.pgzx);
@@ -141,15 +141,15 @@ pub const Project = struct {
     }
 
     pub fn addIncludePath(proj: *Project, path: LazyPath) void {
-        proj.includePaths.append(path) catch unreachable;
+        proj.includePaths.append(proj.build.allocator, path) catch unreachable;
     }
 
     pub fn addLibraryPath(proj: *Project, path: LazyPath) void {
-        proj.libraryPaths.append(path) catch unreachable;
+        proj.libraryPaths.append(proj.build.allocator, path) catch unreachable;
     }
 
     pub fn addCSourceFiles(proj: *Project, options: AddCSourceFilesOptions) void {
-        proj.cSourcesFiles.append(options) catch unreachable;
+        proj.cSourcesFiles.append(proj.build.allocator, options) catch unreachable;
     }
 };
 
@@ -190,12 +190,12 @@ pub const InstallExtension = struct {
 
         // paths
         root_dir: ?[]const u8 = null,
-        root_source_file: ?LazyPath = null,
+        source_file: ?LazyPath = null,
         extension_dir: ?[]const u8 = null,
 
         // shared library options
         target: ?std.Build.ResolvedTarget = null,
-        optimize: ?std.builtin.Mode = null,
+        optimize: ?std.builtin.OptimizeMode = null,
         single_threaded: bool = true,
         link_libc: bool = true,
         link_allow_shlib_undefined: bool = true,
@@ -209,7 +209,7 @@ pub const InstallExtension = struct {
             .name = options.name,
             .version = options.version,
             .root_dir = root_dir,
-            .root_source_file = options.root_source_file,
+            .source_file = options.source_file,
             .link_libc = options.link_libc,
         });
 
@@ -241,7 +241,7 @@ pub const RunExec = struct {
         var r = b.std_build.allocator.create(RunExec) catch @panic("OOM");
         r.* = .{
             .owner = b,
-            .argv = std.ArrayList([]const u8).init(b.std_build.allocator),
+            .argv = .{},
             .step = Step.init(.{
                 .id = base_id,
                 .name = name,
@@ -249,12 +249,12 @@ pub const RunExec = struct {
                 .makeFn = make,
             }),
         };
-        r.argv.appendSlice(argv) catch @panic("OOM");
+        r.argv.appendSlice(r.owner.std_build.allocator, argv) catch @panic("OOM");
         return r;
     }
 
     fn addArg(r: *RunExec, arg: []const u8) void {
-        r.argv.append(arg) catch @panic("OOM");
+        r.argv.append(r.owner.std_build.allocator, arg) catch @panic("OOM");
     }
 
     fn addArgOption(r: *RunExec, option: []const u8, arg: []const u8) void {
@@ -298,7 +298,7 @@ pub const RunExec = struct {
 
 pub const InitOptions = struct {
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.Mode,
+    optimize: std.builtin.OptimizeMode,
     debug: DebugOptions = .{},
 };
 
@@ -370,7 +370,7 @@ const ExtensionLibOptions = struct {
     name: []const u8,
     version: ExtensionVersion,
     root_dir: ?[]const u8 = null,
-    root_source_file: ?LazyPath = null,
+    source_file: ?LazyPath = null,
     link_libc: bool = true,
 };
 
@@ -378,17 +378,19 @@ pub fn addExtensionLib(b: *Build, options: ExtensionLibOptions) *Step.Compile {
     const root_dir = options.root_dir orelse
         b.std_build.pathJoin(&[_][]const u8{ "src/", options.name });
 
-    const lib = b.std_build.addSharedLibrary(.{
+    const lib = b.std_build.addLibrary(.{
         .name = options.name,
         .version = .{
             .major = options.version.major,
             .minor = options.version.minor,
             .patch = 0,
         },
-        .root_source_file = b.resolveLazyPath(root_dir, options.root_source_file, "main.zig"),
-        .target = b.options.target,
-        .optimize = b.options.optimize,
-        .link_libc = options.link_libc,
+        .root_module = b.std_build.createModule(.{
+            .root_source_file = resolveLazyPath(b, root_dir, options.source_file, "main.zig"),
+            .target = b.options.target,
+            .optimize = b.options.optimize,
+            .link_libc = options.link_libc,
+        }),
     });
     lib.addIncludePath(.{
         .cwd_relative = b.getIncludeServerDir(),
@@ -619,7 +621,8 @@ pub fn runPGConfig(b: *Build, question: []const u8) []const u8 {
     };
 
     if (b.debug.pg_config) {
-        std.debug.print("Running pg_config: {s}\n", .{argv});
+        const joined_argv = std.mem.join(allocator, " ", argv[0..]) catch @panic("OOM");
+        std.debug.print("Running pg_config: {s}\n", .{joined_argv});
     }
 
     var child = std.process.Child.init(&argv, allocator);
