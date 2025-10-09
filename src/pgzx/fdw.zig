@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const pg = @import("pgzx_pgsys");
+const pg = @import("pgzx_pgsys").pg;
 
 const elog = @import("elog.zig");
 const mem = @import("mem.zig");

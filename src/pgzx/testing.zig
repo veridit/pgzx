@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const pg = @import("pgzx_pgsys");
+pub const pg = @import("pgzx_pgsys").pg;
 
 pub const err = @import("err.zig");
 pub const elog = @import("elog.zig");

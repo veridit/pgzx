@@ -38,7 +38,7 @@ pub fn SList(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) type 
         }
 
         pub inline fn pushHead(self: *Self, v: *T) void {
-            pg.slist_push_head(&self.head, Self.nodePtr(v));
+            pg.slist_push_head(&self.head, Self.Meta.nodePtr(v));
         }
 
         pub inline fn popHead(self: *Self) ?*T {
