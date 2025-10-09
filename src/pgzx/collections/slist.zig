@@ -2,7 +2,7 @@
 
 const std = @import("std");
 
-const pg = @import("pgzx_pgsys");
+const pg = @import("pgzx_pgsys").pg;
 
 fn initNode() pg.slist_node {
     return .{ .next = null };
@@ -13,7 +13,7 @@ pub fn SList(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) type 
         const Self = @This();
         const Iterator = SListIter(T, node_field);
 
-        usingnamespace SListMeta(T, node_field);
+        const Meta = SListMeta(T, node_field);
 
         head: pg.slist_head,
 
@@ -29,7 +29,7 @@ pub fn SList(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) type 
 
         pub inline fn initFrom(init_node: *T) Self {
             var l = Self.init();
-            l.head.head.next = Self.nodePtr(init_node);
+            l.head.head.next = Self.Meta.nodePtr(init_node);
             return l;
         }
 
@@ -43,12 +43,12 @@ pub fn SList(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) type 
 
         pub inline fn popHead(self: *Self) ?*T {
             const node_ptr = pg.slist_pop_head_node(&self.head);
-            return Self.optNodeParentPtr(node_ptr);
+            return Self.Meta.optNodeParentPtr(node_ptr);
         }
 
         pub inline fn headNode(self: Self) ?*T {
             const node_ptr = pg.slist_head_node(@constCast(&self.head));
-            return Self.optNodeParentPtr(node_ptr);
+            return Self.Meta.optNodeParentPtr(node_ptr);
         }
 
         pub fn tail(self: Self) ?Self {
@@ -63,16 +63,16 @@ pub fn SList(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) type 
         }
 
         pub inline fn insertAfter(prev: *T, v: *T) void {
-            pg.slist_insert_after(Self.nodePtr(prev), Self.nodePtr(v));
+            pg.slist_insert_after(Self.Meta.nodePtr(prev), Self.Meta.nodePtr(v));
         }
 
         pub inline fn hasNext(v: *T) bool {
-            return Self.nodePtr(v).*.next != null;
+            return Self.Meta.nodePtr(v).*.next != null;
         }
 
         pub inline fn next(v: *T) ?*T {
-            const node_ptr = pg.slist_next(Self.nodePtr(v));
-            return Self.optNodeParentPtr(node_ptr);
+            const node_ptr = pg.slist_next(Self.Meta.nodePtr(v));
+            return Self.Meta.optNodeParentPtr(node_ptr);
         }
 
         pub inline fn iterator(self: *Self) Iterator {
@@ -86,7 +86,7 @@ pub fn SList(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) type 
 pub fn SListIter(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) type {
     return struct {
         const Self = @This();
-        usingnamespace SListMeta(T, node_field);
+        const Meta = SListMeta(T, node_field);
 
         iter: pg.slist_iter,
 
@@ -94,7 +94,7 @@ pub fn SListIter(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) t
             if (self.iter.cur == null) return null;
             const node_ptr = self.iter.cur;
             self.iter.cur = node_ptr.*.next;
-            return if (node_ptr) |p| Self.nodeParentPtr(p) else null;
+            return if (node_ptr) |p| Self.Meta.nodeParentPtr(p) else null;
         }
     };
 }
@@ -103,15 +103,15 @@ fn SListMeta(comptime T: type, comptime node_field: std.meta.FieldEnum(T)) type 
     return struct {
         const node = std.meta.fieldInfo(T, node_field).name;
 
-        inline fn nodePtr(v: *T) *pg.slist_node {
+        pub inline fn nodePtr(v: *T) *pg.slist_node {
             return &@field(v, node);
         }
 
-        inline fn nodeParentPtr(n: *pg.slist_node) ?*T {
+        pub inline fn nodeParentPtr(n: *pg.slist_node) ?*T {
             return @fieldParentPtr(node, n);
         }
 
-        inline fn optNodeParentPtr(n: ?*pg.slist_node) ?*T {
+        pub inline fn optNodeParentPtr(n: ?*pg.slist_node) ?*T {
             return if (n) |p| nodeParentPtr(p) else null;
         }
     };

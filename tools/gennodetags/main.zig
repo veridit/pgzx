@@ -32,28 +32,32 @@ pub fn main() !void {
     if (args.len != 2)
         fatal("wrong number of arguments", .{});
 
-    var out = std.fs.cwd().createFile(args[1], .{}) catch |err| {
+    var file = std.fs.cwd().createFile(args[1], .{}) catch |err| {
         fatal("create file {s}: {}\n", .{ args[1], err });
     };
-    defer out.close();
+    defer file.close();
+
+    var buffer: [4096]u8 = undefined;
+    var file_writer = file.writer(&buffer);
+    const out = &file_writer.interface;
 
     try out.writeAll(
         \\pub const std = @import("std");
         \\
-        \\pub const pg = @import("pgzx_pgsys");
+        \\pub const pg = @import("pgzx_pgsys").pg;
         \\
         \\
     );
 
     // 1. collect all node tags into `node_tags` list using comptime reflection.
     @setEvalBranchQuota(50000);
-    var node_tags = std.ArrayList([]const u8).init(arena);
-    defer node_tags.deinit();
+    var node_tags = std.ArrayList([]const u8).empty;
+    defer node_tags.deinit(arena);
     const pg_mod = @typeInfo(pg).@"struct";
     inline for (pg_mod.decls) |decl| {
         const name = decl.name;
         if (std.mem.startsWith(u8, name, "T_")) {
-            node_tags.append(decl.name) catch |err| {
+            node_tags.append(arena, decl.name) catch |err| {
                 fatal("build node tags list: {}\n", .{err});
             };
         }
@@ -63,7 +67,7 @@ pub fn main() !void {
     try out.writeAll("pub const Tag = enum (pg.NodeTag) {\n");
     for (node_tags.items) |tag| {
         const name = tag[2..];
-        try out.writer().print("{s} = pg.{s},\n", .{ name, tag });
+        try out.print("{s} = pg.{s},\n", .{ name, tag });
     }
     try out.writeAll("};\n\n");
 
@@ -75,7 +79,7 @@ pub fn main() !void {
 
         const typeName = tag[2..];
         try out.writeAll(".{");
-        try out.writer().print("pg.{s}, pg.{s}", .{ tag, typeName });
+        try out.print("pg.{s}, pg.{s}", .{ tag, typeName });
         try out.writeAll("},\n");
     }
     try out.writeAll("};\n");
@@ -101,6 +105,7 @@ pub fn main() !void {
         \\}
     );
 
+    try out.flush();
     return std.process.cleanExit();
 }
 

@@ -80,7 +80,7 @@ pub fn build(b: *std.Build) void {
     // pgzx: main project module.
     // This module re-exports pgzx_pgsys, other generated modules, and utility functions.
     const pgzx = blk: {
-        const module = b.createModule(.{
+        const module = b.addModule("pgzx", .{
             .root_source_file = b.path("./src/pgzx.zig"),
             .target = target,
             .optimize = optimize,
@@ -171,5 +171,16 @@ pub fn build(b: *std.Build) void {
 
         psql_run_tests.step.dependOn(&test_ext.step);
         steps.unit.dependOn(&psql_run_tests.step);
+    }
+
+    // Examples
+    const examples_step = b.step("examples", "Build all examples");
+    inline for ([_][]const u8{ "char_count_zig", "pgaudit_zig", "pghostname_zig", "spi_sql", "sqlfns" }) |example| {
+        const build_cmd = b.addSystemCommand(&[_][]const u8{
+            "zig",
+            "build",
+        });
+        build_cmd.cwd = b.path(b.pathJoin(&.{"examples", example}));
+        examples_step.dependOn(&build_cmd.step);
     }
 }

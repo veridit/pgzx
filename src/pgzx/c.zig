@@ -199,4 +199,4 @@ const includes = @cImport({
     @cInclude("libpqsrv.h");
 });
 
-pub usingnamespace includes;
+pub const pg = includes;
