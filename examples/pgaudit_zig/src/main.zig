@@ -1,6 +1,6 @@
 const std = @import("std");
 const pgzx = @import("pgzx");
-const pg = pgzx.c;
+const pg = pgzx.c.pg;
 
 comptime {
     pgzx.fmgr.PG_MODULE_MAGIC();
@@ -29,7 +29,7 @@ const Commands = enum {
 const AuditEvent = struct {
     command: Commands,
     commandText: []const u8,
-    relations: ?std.ArrayList(RelEntry) = null,
+    relations: ?std.array_list.Managed(RelEntry) = null,
 
     queryContext: ?pg.MemoryContext = null,
 
@@ -47,7 +47,7 @@ const EventsError = error{
     EventNotFound,
 };
 
-var audit_events_list: ?std.ArrayList(*AuditEvent) = null;
+var audit_events_list: ?std.array_list.Managed(*AuditEvent) = null;
 var global_memctx: pgzx.mem.MemoryContextAllocator = undefined;
 
 const settings = struct {
@@ -84,7 +84,7 @@ pub export fn _PG_init() void {
 }
 
 // Return the session local list of audit events. Initialized the memory context and the list if necessary.
-fn getAuditList() error{PGErrorStack}!*std.ArrayList(*AuditEvent) {
+fn getAuditList() error{PGErrorStack}!*std.array_list.Managed(*AuditEvent) {
     if (audit_events_list) |*list| {
         return list;
     }
@@ -95,7 +95,7 @@ fn getAuditList() error{PGErrorStack}!*std.ArrayList(*AuditEvent) {
     global_memctx = pgzx.mem.createAllocSetContext("pgaudit_zig_context_global", .{ .parent = pg.TopMemoryContext }) catch |err| {
         return pgzx.elog.Error(@src(), "pgaudit_zig: failed to create memory context: {}\n", .{err});
     };
-    audit_events_list = std.ArrayList(*AuditEvent).init(global_memctx.allocator());
+    audit_events_list = std.array_list.Managed(*AuditEvent).init(global_memctx.allocator());
     return &audit_events_list.?;
 }
 
@@ -131,7 +131,7 @@ fn executorStartHook(queryDesc: [*c]pg.QueryDesc, eflags: c_int) !void {
     );
 }
 
-fn pgaudit_zig_ExecutorStart_hook(queryDesc: [*c]pg.QueryDesc, eflags: c_int) callconv(.C) void {
+fn pgaudit_zig_ExecutorStart_hook(queryDesc: [*c]pg.QueryDesc, eflags: c_int) callconv(.c) void {
     std.log.debug("pgaudit_zig: ExecutorStart_hook\n", .{});
 
     executorStartHook(queryDesc, eflags) catch |err| {
@@ -147,7 +147,7 @@ fn executorCheckPermsHook(rangeTables: [*c]pg.List, rtePermInfos: [*c]pg.List, v
     const event = list.getLast();
     var allocator = event.memctx.allocator();
 
-    var relList = std.ArrayList(RelEntry).init(allocator);
+    var relList = std.array_list.Managed(RelEntry).init(allocator);
     errdefer relList.deinit();
 
     var errctx = pgzx.err.Context.init();
@@ -184,7 +184,7 @@ fn executorCheckPermsHook(rangeTables: [*c]pg.List, rtePermInfos: [*c]pg.List, v
     return true;
 }
 
-pub fn pgaudit_zig_ExecutorCheckPerms_hook(rangeTables: [*c]pg.List, rtePermInfos: [*c]pg.List, violation: bool) callconv(.C) bool {
+pub fn pgaudit_zig_ExecutorCheckPerms_hook(rangeTables: [*c]pg.List, rtePermInfos: [*c]pg.List, violation: bool) callconv(.c) bool {
     std.log.debug("pgaudit_zig: ExecutorCheckPerms_hook\n", .{});
 
     return executorCheckPermsHook(rangeTables, rtePermInfos, violation) catch |err| {
@@ -194,7 +194,7 @@ pub fn pgaudit_zig_ExecutorCheckPerms_hook(rangeTables: [*c]pg.List, rtePermInfo
     };
 }
 
-fn pgaudit_zig_ExecutorFinish_hook(queryDesc: [*c]pg.QueryDesc) callconv(.C) void {
+fn pgaudit_zig_ExecutorFinish_hook(queryDesc: [*c]pg.QueryDesc) callconv(.c) void {
     std.log.debug("pgaudit_zig: ExecutorFinish_hook\n", .{});
 
     const queryContext = queryDesc.*.estate.*.es_query_cxt;
@@ -211,12 +211,12 @@ fn pgaudit_zig_ExecutorFinish_hook(queryDesc: [*c]pg.QueryDesc) callconv(.C) voi
     };
 }
 
-fn popEvent(event_list: *std.ArrayList(*AuditEvent), memctx: pg.MemoryContext) error{EventNotFound}!*AuditEvent {
+fn popEvent(event_list: *std.array_list.Managed(*AuditEvent), memctx: pg.MemoryContext) error{EventNotFound}!*AuditEvent {
     const idx = try findEvent(event_list, memctx);
     return event_list.swapRemove(idx);
 }
 
-fn findEvent(event_list: *std.ArrayList(*AuditEvent), memctx: pg.MemoryContext) error{EventNotFound}!usize {
+fn findEvent(event_list: *std.array_list.Managed(*AuditEvent), memctx: pg.MemoryContext) error{EventNotFound}!usize {
     for (event_list.items, 0..) |event, i| {
         if (event.queryContext) |cxt| {
             if (cxt == memctx) {
@@ -249,9 +249,9 @@ fn pgaudit_zig_MemoryContextCallback(memctx: pg.MemoryContext) void {
     freeEvent(event);
 }
 
-fn eventToJSON(event: *AuditEvent, writer: std.ArrayList(u8).Writer) !void {
+fn eventToJSON(event: *AuditEvent, writer: std.array_list.Managed(u8).Writer) !void {
     _ = try writer.write("{\"operation\": ");
-    try std.json.encodeJsonString(@tagName(event.command), .{}, writer);
+    try writer.print("{f}", .{std.json.fmt(@tagName(event.command), .{})});
 
     if (event.relations) |relations| {
         _ = try writer.write(", \"relations\": [");
@@ -264,11 +264,11 @@ fn eventToJSON(event: *AuditEvent, writer: std.ArrayList(u8).Writer) !void {
             _ = try writer.write("\"relOid\": ");
             try std.fmt.format(writer, "{d}", .{rel.rel_oid});
             _ = try writer.write(", \"relname\": ");
-            try std.json.encodeJsonString(rel.rel_name, .{}, writer);
+            try writer.print("{f}", .{std.json.fmt(rel.rel_name, .{})});
             _ = try writer.write(", \"namespaceOid\": ");
             try std.fmt.format(writer, "{d}", .{rel.rel_namespace_oid});
             _ = try writer.write(", \"relnamespaceName\": ");
-            try std.json.encodeJsonString(rel.rel_namespace_name, .{}, writer);
+            try writer.print("{f}", .{std.json.fmt(rel.rel_namespace_name, .{})});
             _ = try writer.write("}");
         }
         _ = try writer.write("]");
@@ -276,7 +276,7 @@ fn eventToJSON(event: *AuditEvent, writer: std.ArrayList(u8).Writer) !void {
 
     if (settings.log_statement.value) {
         _ = try writer.write(", \"commandText\": ");
-        try std.json.encodeJsonString(event.commandText, .{}, writer);
+        try writer.print("{f}", .{std.json.fmt(event.commandText, .{})});
     }
     _ = try writer.write("}");
 }
@@ -284,7 +284,7 @@ fn eventToJSON(event: *AuditEvent, writer: std.ArrayList(u8).Writer) !void {
 fn logAuditEvent(event: *AuditEvent) !void {
     std.log.debug("pgaudit_zig: logAuditEvent\n", .{});
 
-    var string = std.ArrayList(u8).init(pgzx.mem.PGCurrentContextAllocator);
+    var string = std.array_list.Managed(u8).init(pgzx.mem.PGCurrentContextAllocator);
     defer string.deinit();
     const writer = string.writer();
 
@@ -335,7 +335,7 @@ const Tests = struct {
             .memctx = memctx,
         };
 
-        var string = std.ArrayList(u8).init(allocator);
+        var string = std.array_list.Managed(u8).init(allocator);
         defer string.deinit();
         const writer = string.writer();
 

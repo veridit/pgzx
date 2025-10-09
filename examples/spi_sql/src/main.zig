@@ -1,6 +1,6 @@
 const std = @import("std");
 const pgzx = @import("pgzx");
-const pg = pgzx.c;
+const pg = pgzx.c.pg;
 
 comptime {
     pgzx.PG_MODULE_MAGIC();

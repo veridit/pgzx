@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
         .name = NAME,
         .version = VERSION,
         .root_dir = "src/",
-        .root_source_file = "src/main.zig",
+        .source_file = "src/main.zig",
     });
 
     const steps = .{
