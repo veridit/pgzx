@@ -19,12 +19,16 @@ pub const FN_INFO_V1 = [*c]const Pg_finfo_record;
 /// This value must be returned by a function named `Pg_magic_func`.
 pub const PG_MAGIC = Pg_magic_struct{
     .len = @bitCast(@as(c_uint, @truncate(@sizeOf(Pg_magic_struct)))),
-    .version = @divTrunc(pg.PG_VERSION_NUM, @as(c_int, 100)),
-    .funcmaxargs = pg.FUNC_MAX_ARGS,
-    .indexmaxkeys = pg.INDEX_MAX_KEYS,
-    .namedatalen = pg.NAMEDATALEN,
-    .float8byval = pg.FLOAT8PASSBYVAL,
-    .abi_extra = [32]u8{ 'P', 'o', 's', 't', 'g', 'r', 'e', 'S', 'Q', 'L', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    .abi_fields = .{
+        .version = @divTrunc(pg.PG_VERSION_NUM, @as(c_int, 100)),
+        .funcmaxargs = pg.FUNC_MAX_ARGS,
+        .indexmaxkeys = pg.INDEX_MAX_KEYS,
+        .namedatalen = pg.NAMEDATALEN,
+        .float8byval = pg.FLOAT8PASSBYVAL,
+        .abi_extra = [32]u8{ 'P', 'o', 's', 't', 'g', 'r', 'e', 'S', 'Q', 'L', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    },
+    .name = null,
+    .version = null,
 };
 
 /// Postgres magic indicator that a function uses the v1 UDF API.
