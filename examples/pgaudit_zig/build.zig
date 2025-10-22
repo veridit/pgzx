@@ -11,16 +11,26 @@ pub fn build(b: *std.Build) void {
     const DB_TEST_USER = "postgres";
     const DB_TEST_PORT = 5432;
 
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    var pgbuild = PGBuild.create(b, .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const build_options = b.addOptions();
     build_options.addOption(bool, "testfn", b.option(bool, "testfn", "Register test function") orelse false);
 
-    var proj = PGBuild.Project.init(b, .{
+    const ext = pgbuild.addInstallExtension(.{
         .name = NAME,
         .version = VERSION,
+        .source_file = b.path("src/main.zig"),
         .root_dir = "src/",
-        .source_file = "src/main.zig",
+        .link_libc = true,
+        .link_allow_shlib_undefined = true,
     });
-    proj.addOptions("build_options", build_options);
+    ext.lib.root_module.addOptions("build_options", build_options);
 
     const steps = .{
         .check = b.step("check", "Check if project compiles"),
@@ -29,12 +39,17 @@ pub fn build(b: *std.Build) void {
     };
 
     { // build and install extension
-        steps.install.dependOn(&proj.installExtensionLib().step);
-        steps.install.dependOn(&proj.installExtensionDir().step);
+        steps.install.dependOn(&ext.step);
     }
 
     { // check extension Zig source code only. No linkage or installation for faster development.
-        const lib = proj.extensionLib();
+        const lib = pgbuild.addExtensionLib(.{
+            .name = NAME,
+            .version = VERSION,
+            .source_file = b.path("src/main.zig"),
+            .root_dir = "src/",
+        });
+        lib.root_module.addOptions("build_options", build_options);
         lib.linkage = null;
         steps.check.dependOn(&lib.step);
     }
@@ -43,19 +58,25 @@ pub fn build(b: *std.Build) void {
         const test_options = b.addOptions();
         test_options.addOption(bool, "testfn", true);
 
-        const lib = proj.extensionLib();
-        lib.root_module.addOptions("build_options", test_options);
+        const test_ext = pgbuild.addInstallExtension(.{
+            .name = NAME,
+            .version = VERSION,
+            .source_file = b.path("src/main.zig"),
+            .root_dir = "src/",
+            .link_libc = true,
+            .link_allow_shlib_undefined = true,
+        });
+        test_ext.lib.root_module.addOptions("build_options", test_options);
 
         // Step for running the unit tests.
-        const psql_run_tests = proj.pgbuild.addRunTests(.{
+        const psql_run_tests = pgbuild.addRunTests(.{
             .name = NAME,
             .db_user = DB_TEST_USER,
             .db_port = DB_TEST_PORT,
         });
 
         // Build and install extension before running the tests.
-        psql_run_tests.step.dependOn(&proj.pgbuild.addInstallExtensionLibArtifact(lib, NAME).step);
-        psql_run_tests.step.dependOn(&proj.installExtensionLib().step);
+        psql_run_tests.step.dependOn(&test_ext.step);
 
         steps.unit.dependOn(&psql_run_tests.step);
     }

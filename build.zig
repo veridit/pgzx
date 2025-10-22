@@ -2,6 +2,32 @@ const std = @import("std");
 
 pub const Build = @import("src/pgzx/build.zig");
 
+fn createPgsysModule(
+    b: *std.Build,
+    pgbuild: *Build,
+    name: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Module {
+    const module = b.addModule(name, .{
+        .root_source_file = b.path("./src/pgzx/c.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Internal C headers
+    module.addIncludePath(b.path("./src/pgzx/c/include/"));
+
+    // Postgres Headers
+    module.addIncludePath(.{
+        .cwd_relative = pgbuild.getIncludeServerDir(),
+    });
+    module.addIncludePath(.{
+        .cwd_relative = pgbuild.getIncludeDir(),
+    });
+    return module;
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -23,29 +49,14 @@ pub fn build(b: *std.Build) void {
     };
 
     // pgzx_pgsys module: C bindings to Postgres
-    const pgzx_pgsys = blk: {
-        const module = b.createModule(.{
-            .root_source_file = b.path("./src/pgzx/c.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-
-        // Internal C headers
-        module.addIncludePath(b.path("./src/pgzx/c/include/"));
-
-        // Postgres Headers
-        module.addIncludePath(.{
-            .cwd_relative = pgbuild.getIncludeServerDir(),
-        });
-        module.addIncludePath(.{
-            .cwd_relative = pgbuild.getIncludeDir(),
-        });
-        module.addLibraryPath(.{
+    const pgzx_pgsys = createPgsysModule(b, pgbuild, "pgzx_pgsys", target, optimize);
+    {
+        pgzx_pgsys.addLibraryPath(.{
             .cwd_relative = pgbuild.getLibDir(),
         });
 
         // libpq support
-        module.addCSourceFiles(.{
+        pgzx_pgsys.addCSourceFiles(.{
             .files = &[_][]const u8{
                 "./src/pgzx/c/libpqsrv.c",
             },
@@ -54,24 +65,27 @@ pub fn build(b: *std.Build) void {
                 "-I", pgbuild.getIncludeServerDir(),
             },
         });
-        module.linkSystemLibrary("pq", .{});
+        pgzx_pgsys.linkSystemLibrary("pq", .{});
+    }
 
-        break :blk module;
-    };
+    const pgzx_pgsys_host = createPgsysModule(b, pgbuild, "pgzx_pgsys_host", b.graph.host, optimize);
 
     // codegen
     // The codegen produces Zig files that are imported as modules by pgzx.
     const node_tags_src = blk: {
+        const gennodetags_module = b.addModule("gennodetags", .{
+            .root_source_file = b.path("./tools/gennodetags/main.zig"),
+            .target = b.graph.host,
+            .link_libc = true,
+        });
+        gennodetags_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeServerDir() });
+        gennodetags_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeDir() });
+        gennodetags_module.addImport("pgzx_pgsys", pgzx_pgsys_host);
+
         const tool = b.addExecutable(.{
             .name = "gennodetags",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("./tools/gennodetags/main.zig"),
-                .target = b.graph.host,
-                .link_libc = true,
-            }),
+            .root_module = gennodetags_module,
         });
-        tool.root_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeServerDir() });
-        tool.root_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeDir() });
 
         const tool_step = b.addRunArtifact(tool);
         break :blk tool_step.addOutputFileArg("nodetags.zig");

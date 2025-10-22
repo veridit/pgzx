@@ -391,6 +391,7 @@ pub fn addExtensionLib(b: *Build, options: ExtensionLibOptions) *Step.Compile {
             .optimize = b.options.optimize,
             .link_libc = options.link_libc,
         }),
+        .linkage = .dynamic,
     });
     lib.addIncludePath(.{
         .cwd_relative = b.getIncludeServerDir(),
@@ -515,6 +516,9 @@ pub fn addRegress(b: *Build, options: PGRegressOptions) *RunExec {
         root_dir,
     });
 
+    const lib_dir = b.std_build.getInstallPath(.lib, "postgresql");
+    runner.addArgs(&[_][]const u8{ "--libdir", lib_dir });
+
     if (options.db_host) |db_host| {
         runner.addArgs(&[_][]const u8{ "--host", db_host });
     }
@@ -558,16 +562,20 @@ pub const RunTestsOptions = struct {
 /// This runs the following SQL commands:
 ///
 ///  DROP FUNCTION IF EXISTS run_tests;
-///  CREATE FUNCTION run_tests() RETURNS INTEGER AS '\''$libdir/{name}'\'' LANGUAGE C IMMUTABLE;
+///  CREATE FUNCTION run_tests() RETURNS INTEGER AS '\''/path/to/lib{name}.dylib'\'' LANGUAGE C IMMUTABLE;
 ///  SELECT run_tests();
 pub fn addRunTests(b: *Build, options: RunTestsOptions) *RunExec {
+    const lib_dir = b.std_build.getInstallPath(.lib, "postgresql");
+    const lib_filename = std.fmt.allocPrint(b.std_build.allocator, "{s}{s}", .{ options.name, b.options.target.result.dynamicLibSuffix() }) catch @panic("OOM");
+    const lib_path = b.std_build.pathJoin(&[_][]const u8{ lib_dir, lib_filename });
+
     const sql = std.fmt.allocPrint(
         b.std_build.allocator,
         \\ DROP FUNCTION IF EXISTS run_tests;
-        \\ CREATE FUNCTION run_tests() RETURNS INTEGER AS '$libdir/{s}' LANGUAGE C IMMUTABLE;
+        \\ CREATE FUNCTION run_tests() RETURNS INTEGER AS '{s}' LANGUAGE C IMMUTABLE;
         \\ SELECT run_tests();
     ,
-        .{options.name},
+        .{lib_path},
     ) catch @panic("OOM");
     const psql_exe = b.getPsqlPath();
     var runner = RunExec.create(b, "run_tests_psql", &[_][]const u8{

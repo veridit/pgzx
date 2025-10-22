@@ -11,11 +11,21 @@ pub fn build(b: *std.Build) void {
     const DB_TEST_USER = "postgres";
     const DB_TEST_PORT = 5432;
 
-    const proj = PGBuild.Project.init(b, .{
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    var pgbuild = PGBuild.create(b, .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const ext = pgbuild.addInstallExtension(.{
         .name = NAME,
         .version = VERSION,
+        .source_file = b.path("src/main.zig"),
         .root_dir = "src/",
-        .source_file = "src/main.zig",
+        .link_libc = true,
+        .link_allow_shlib_undefined = true,
     });
 
     const steps = .{
@@ -25,18 +35,22 @@ pub fn build(b: *std.Build) void {
     };
 
     { // build and install extension
-        steps.install.dependOn(&proj.installExtensionLib().step);
-        steps.install.dependOn(&proj.installExtensionDir().step);
+        steps.install.dependOn(&ext.step);
     }
 
     { // check extension Zig source code only. No linkage or installation for faster development.
-        const lib = proj.extensionLib();
+        const lib = pgbuild.addExtensionLib(.{
+            .name = NAME,
+            .version = VERSION,
+            .source_file = b.path("src/main.zig"),
+            .root_dir = "src/",
+        });
         lib.linkage = null;
         steps.check.dependOn(&lib.step);
     }
 
     { // pg_regress tests (regression tests use the default build)
-        const regress = proj.pgbuild.addRegress(.{
+        var regress = pgbuild.addRegress(.{
             .db_user = DB_TEST_USER,
             .db_port = DB_TEST_PORT,
             .root_dir = ".",
