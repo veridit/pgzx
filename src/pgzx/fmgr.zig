@@ -10,6 +10,7 @@ pub const args = @import("fmgr/args.zig");
 pub const varatt = pg.varatt;
 
 pub const Pg_magic_struct = pg.Pg_magic_struct;
+pub const Pg_abi_values = pg.Pg_abi_values;
 pub const Pg_finfo_record = pg.Pg_finfo_record;
 
 pub const MAGIC = [*c]const Pg_magic_struct;
@@ -18,14 +19,23 @@ pub const FN_INFO_V1 = [*c]const Pg_finfo_record;
 /// Use PG_MAGIC value to indicate to PostgreSQL that we have a loadable module.
 /// This value must be returned by a function named `Pg_magic_func`.
 pub const PG_MAGIC = Pg_magic_struct{
-    .len = @bitCast(@as(c_uint, @truncate(@sizeOf(Pg_magic_struct)))),
-    .abi_fields = .{
+    .len = @as(c_int, @sizeOf(Pg_magic_struct)),
+    .abi_fields = Pg_abi_values{
         .version = @divTrunc(pg.PG_VERSION_NUM, @as(c_int, 100)),
         .funcmaxargs = pg.FUNC_MAX_ARGS,
         .indexmaxkeys = pg.INDEX_MAX_KEYS,
         .namedatalen = pg.NAMEDATALEN,
         .float8byval = pg.FLOAT8PASSBYVAL,
-        .abi_extra = [32]u8{ 'P', 'o', 's', 't', 'g', 'r', 'e', 'S', 'Q', 'L', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .abi_extra = blk: {
+            var buf = std.mem.zeroes([32]u8);
+            const ptr: [*c]const u8 = @ptrCast(pg.FMGR_ABI_EXTRA);
+            const val = std.mem.span(ptr);
+            if (val.len > buf.len) {
+                @compileError("FMGR_ABI_EXTRA is too long");
+            }
+            @memcpy(buf[0..val.len], val);
+            break :blk buf;
+        },
     },
     .name = null,
     .version = null,
