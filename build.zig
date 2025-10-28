@@ -32,6 +32,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const test_filter = b.option([]const u8, "test_filter", "Run a single test suite by name");
+
     var pgbuild = Build.create(b, .{
         .target = target,
         .optimize = optimize,
@@ -148,6 +150,7 @@ pub fn build(b: *std.Build) void {
     const test_ext = blk: {
         const test_options = b.addOptions();
         test_options.addOption(bool, "testfn", true);
+        test_options.addOption([]const u8, "test_filter", test_filter orelse "");
 
         const tests = pgbuild.addInstallExtension(.{
             .name = "pgzx_unit",
