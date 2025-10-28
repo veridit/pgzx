@@ -178,6 +178,7 @@ const includes = @cImport({
     @cInclude("utils/guc.h");
     @cInclude("utils/guc_hooks.h");
     @cInclude("utils/guc_tables.h");
+    @cInclude("utils/hsearch.h");
     @cInclude("utils/memutils.h");
     @cInclude("utils/wait_event.h");
     @cInclude("utils/jsonb.h");
