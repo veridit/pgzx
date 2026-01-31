@@ -10,10 +10,10 @@ comptime {
         pgzx.collections.list.TestSuite_PointerList,
         pgzx.collections.slist.TestSuite_SList,
         pgzx.collections.dlist.TestSuite_DList,
-        // NOTE: HTab tests disabled due to Postgres.app bug on macOS arm64.
-        // Both PG17 and PG18 from Postgres.app crash when calling hash_get_num_entries()
-        // on a freshly created HTAB. Pure C code also crashes - not a Zig issue.
-        // See: https://github.com/xataio/pgzx/issues/XXX (TODO: file issue)
+        // NOTE: HTab tests disabled due to crashes on macOS arm64.
+        // Direct calls to pg.hash_search() work fine (tested in testGetOrPutEntryInt),
+        // but wrapper methods crash. Root cause not yet identified - likely related
+        // to Zig's @cImport handling of HTAB structures on arm64.
         // pgzx.collections.htab.TestSuite_HTab,
         pgzx.meta.TestSuite_Meta,
         pgzx.mem.TestSuite_Mem,

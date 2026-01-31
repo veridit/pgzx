@@ -10,36 +10,59 @@ pub const args = @import("fmgr/args.zig");
 pub const varatt = pg.varatt;
 
 pub const Pg_magic_struct = pg.Pg_magic_struct;
-pub const Pg_abi_values = pg.Pg_abi_values;
 pub const Pg_finfo_record = pg.Pg_finfo_record;
 
 pub const MAGIC = [*c]const Pg_magic_struct;
 pub const FN_INFO_V1 = [*c]const Pg_finfo_record;
 
+/// PG18+ has a nested Pg_abi_values struct; earlier versions have flat fields.
+const has_abi_fields = @hasField(Pg_magic_struct, "abi_fields");
+
+/// For PG18+, export Pg_abi_values type
+pub const Pg_abi_values = if (has_abi_fields) pg.Pg_abi_values else void;
+
+/// Compute the ABI extra string at comptime
+const abi_extra_value: [32]u8 = blk: {
+    var buf = std.mem.zeroes([32]u8);
+    const ptr: [*c]const u8 = @ptrCast(pg.FMGR_ABI_EXTRA);
+    const val = std.mem.span(ptr);
+    if (val.len > buf.len) {
+        @compileError("FMGR_ABI_EXTRA is too long");
+    }
+    @memcpy(buf[0..val.len], val);
+    break :blk buf;
+};
+
 /// Use PG_MAGIC value to indicate to PostgreSQL that we have a loadable module.
 /// This value must be returned by a function named `Pg_magic_func`.
-pub const PG_MAGIC = Pg_magic_struct{
-    .len = @as(c_int, @sizeOf(Pg_magic_struct)),
-    .abi_fields = Pg_abi_values{
+///
+/// PG18+ uses a nested `abi_fields` struct; earlier versions have flat fields.
+pub const PG_MAGIC: Pg_magic_struct = if (has_abi_fields)
+    // PG18+ format with nested abi_fields
+    Pg_magic_struct{
+        .len = @as(c_int, @sizeOf(Pg_magic_struct)),
+        .abi_fields = pg.Pg_abi_values{
+            .version = @divTrunc(pg.PG_VERSION_NUM, @as(c_int, 100)),
+            .funcmaxargs = pg.FUNC_MAX_ARGS,
+            .indexmaxkeys = pg.INDEX_MAX_KEYS,
+            .namedatalen = pg.NAMEDATALEN,
+            .float8byval = pg.FLOAT8PASSBYVAL,
+            .abi_extra = abi_extra_value,
+        },
+        .name = null,
+        .version = null,
+    }
+else
+    // PG16 and earlier format with flat fields
+    Pg_magic_struct{
+        .len = @as(c_int, @sizeOf(Pg_magic_struct)),
         .version = @divTrunc(pg.PG_VERSION_NUM, @as(c_int, 100)),
         .funcmaxargs = pg.FUNC_MAX_ARGS,
         .indexmaxkeys = pg.INDEX_MAX_KEYS,
         .namedatalen = pg.NAMEDATALEN,
         .float8byval = pg.FLOAT8PASSBYVAL,
-        .abi_extra = blk: {
-            var buf = std.mem.zeroes([32]u8);
-            const ptr: [*c]const u8 = @ptrCast(pg.FMGR_ABI_EXTRA);
-            const val = std.mem.span(ptr);
-            if (val.len > buf.len) {
-                @compileError("FMGR_ABI_EXTRA is too long");
-            }
-            @memcpy(buf[0..val.len], val);
-            break :blk buf;
-        },
-    },
-    .name = null,
-    .version = null,
-};
+        .abi_extra = abi_extra_value,
+    };
 
 /// Postgres magic indicator that a function uses the v1 UDF API.
 pub const PG_FINFO_V1_RECORD = Pg_finfo_record{
