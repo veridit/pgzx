@@ -66,20 +66,23 @@ pub fn HTab(comptime Context: type) type {
             }
 
             pub fn initHashCtl(self: Options) pg.HASHCTL {
-                return .{
-                    .num_partitions = @intCast(self.num_partitions orelse 0),
-                    .ssize = @intCast(self.segment_size orelse 0),
-                    .dsize = @intCast(if (self.dir) |d| d.init_size else 0),
-                    .max_dsize = @intCast(if (self.dir) |d| d.max_dsize else pg.NO_MAX_DSIZE),
-                    .keysize = @intCast(if (self.keysize) |k| k else Context.keySize()),
-                    .entrysize = @intCast(if (self.entrysize) |e| e else Context.entrySize()),
-                    .hash = if (self.hash == .Func) self.hash.Func else null,
-                    .match = self.match,
-                    .keycopy = self.keycopy,
-                    .alloc = self.alloc,
-                    .hcxt = self.memctx,
-                    .hctl = null,
-                };
+                // Zero-initialize HASHCTL as PostgreSQL requires (see PG's use of memset)
+                var result: pg.HASHCTL = std.mem.zeroes(pg.HASHCTL);
+
+                result.num_partitions = @intCast(self.num_partitions orelse 0);
+                result.ssize = @intCast(self.segment_size orelse 0);
+                result.dsize = @intCast(if (self.dir) |d| d.init_size else 0);
+                result.max_dsize = @intCast(if (self.dir) |d| d.max_dsize else pg.NO_MAX_DSIZE);
+                result.keysize = @intCast(if (self.keysize) |k| k else Context.keySize());
+                result.entrysize = @intCast(if (self.entrysize) |e| e else Context.entrySize());
+                result.hash = if (self.hash == .Func) self.hash.Func else null;
+                result.match = self.match;
+                result.keycopy = self.keycopy;
+                result.alloc = self.alloc;
+                result.hcxt = self.memctx;
+                result.hctl = null;
+
+                return result;
             }
 
             pub fn initFlags(self: Options) c_int {
@@ -217,7 +220,7 @@ pub fn HTab(comptime Context: type) type {
 
         fn keyPtr(k: ConstKeyPtr) ?*anyopaque {
             if (meta.isSlice(Key)) {
-                return @constCast(@ptrCast(k.ptr));
+                return @ptrCast(@constCast(k.ptr));
             }
             return @constCast(k);
         }
@@ -402,7 +405,7 @@ pub inline fn KeyPtr(comptime K: type) type {
 
 inline fn keyPtr(comptime K: type, k: KeyPtr(K)) ?*anyopaque {
     if (meta.isSlice(K)) {
-        return @constCast(@ptrCast(k.ptr));
+        return @ptrCast(@constCast(k.ptr));
     }
     return @constCast(k);
 }
