@@ -2,8 +2,8 @@
   description = "Description for the project";
 
   inputs = {
-    # Use nixpkgs unstable for PG16/17/18 support
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Use nixpkgs 24.11 for stable PG16/17 support
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
 
     parts.url = "github:hercules-ci/flake-parts";
 
@@ -130,7 +130,6 @@
             // {
               shellHook = ''
                 ${devshell_nix.shellHook or ""}
-                ${config.pre-commit.devShell.shellHook or ""}
               '';
             };
 

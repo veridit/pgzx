@@ -44,7 +44,7 @@ in {
     scripts
     ++ [
       # make linters and formatters available in dev shell
-      pkgs.pre-commit
+      # pkgs.pre-commit  # Disabled: broken Swift dependency in nixpkgs 24.11
       pkgs.alejandra
       pkgs.deadnix
       pkgs.shellcheck
@@ -72,6 +72,10 @@ in {
     # than the default. For our local setup we must overwrite the default location by using
     # the NIX_PGLIBDIR environment variable.
     export NIX_PGLIBDIR=$PG_HOME/lib
+
+    # Use the nix-provided pg_config (from -dev package) for building extensions.
+    # The local $PG_HOME/bin/pg_config is a placeholder that doesn't have dev info.
+    export PG_CONFIG=${postgresql.dev}/bin/pg_config
 
     alias root='cd $PRJ_ROOT'
 
