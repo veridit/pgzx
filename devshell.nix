@@ -1,12 +1,14 @@
 {
   pkgs,
   lib,
+  postgresql ? pkgs.postgresql_16_jit,
   ...
 }: let
+  pgVersion = builtins.head (builtins.match "([0-9]+).*" postgresql.version);
   menu = ''
 
-    PGZX development shell
-    ======================
+    PGZX development shell (PostgreSQL ${pgVersion})
+    ================================================
 
     Available commands:
       menu        - show this menu
@@ -48,7 +50,7 @@ in {
       pkgs.shellcheck
       pkgs.shfmt
 
-      pkgs.postgresql_16_jit
+      postgresql
       pkgs.openssl
       pkgs.gss
       pkgs.krb5

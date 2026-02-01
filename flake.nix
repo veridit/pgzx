@@ -2,7 +2,8 @@
   description = "Description for the project";
 
   inputs = {
-    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2405.635732.tar.gz";
+    # Use nixpkgs unstable for PG16/17/18 support
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     parts.url = "github:hercules-ci/flake-parts";
 
@@ -120,12 +121,11 @@
         };
 
         devShells = let
-          devshell_nix = (import ./devshell.nix) {
-            inherit pkgs;
-            inherit lib;
-          };
-
-          user_shell =
+          mkDevShell = postgresql: let
+            devshell_nix = (import ./devshell.nix) {
+              inherit pkgs lib postgresql;
+            };
+          in
             devshell_nix
             // {
               shellHook = ''
@@ -141,8 +141,16 @@
           # can be quite a pain.
           # On non-darwin systems we will use the nix toolchain for now.
           useSystemCC = pkgs.stdenv.isDarwin;
+
+          # Default shell uses PG16
+          user_shell = mkDevShell pkgs.postgresql_16_jit;
         in {
           default = mkShell user_shell;
+
+          # PostgreSQL version-specific shells
+          pg16 = mkShell (mkDevShell pkgs.postgresql_16_jit);
+          pg17 = mkShell (mkDevShell pkgs.postgresql_17_jit);
+          pg18 = mkShell (mkDevShell (pkgs.postgresql_18 or pkgs.postgresql_17_jit));
 
           # Create development shell with C tools and dependencies to build Postgres locally.
           debug = mkShell (user_shell
