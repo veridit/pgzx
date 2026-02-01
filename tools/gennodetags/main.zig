@@ -44,7 +44,7 @@ pub fn main() !void {
     try out.writeAll(
         \\pub const std = @import("std");
         \\
-        \\pub const pg = @import("pgzx_pgsys").pg;
+        \\pub const pg = @import("c_translated");
         \\
         \\
     );

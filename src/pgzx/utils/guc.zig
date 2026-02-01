@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const pg_pgsys = @import("pgzx_pgsys");
+const pg_pgsys = @import("c_translated");
 const pg = pg_pgsys.pg;
 
 pub const CustomBoolVariable = struct {

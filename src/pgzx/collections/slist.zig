@@ -2,7 +2,7 @@
 
 const std = @import("std");
 
-const pg = @import("pgzx_pgsys").pg;
+const pg = @import("c_translated");
 
 fn initNode() pg.slist_node {
     return .{ .next = null };

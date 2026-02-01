@@ -1,7 +1,7 @@
 //! Postgres intrusive double linked list support.
 
 const std = @import("std");
-const pg = @import("pgzx_pgsys").pg;
+const pg = @import("c_translated");
 
 fn initNode() pg.dlist_node {
     return .{ .prev = null, .next = null };

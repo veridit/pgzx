@@ -1,4 +1,4 @@
-const pg = @import("pgzx_pgsys").pg;
+const pg = @import("c_translated");
 
 // Wrapper for postgres lists.
 //

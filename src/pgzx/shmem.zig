@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const pg = @import("pgzx_pgsys").pg;
+const pg = @import("c_translated");
 
 pub inline fn registerHooks(comptime T: anytype) void {
     if (std.meta.hasFn(T, "requestHook")) {

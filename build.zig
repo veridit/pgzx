@@ -2,32 +2,6 @@ const std = @import("std");
 
 pub const Build = @import("src/pgzx/build.zig");
 
-fn createPgsysModule(
-    b: *std.Build,
-    pgbuild: *Build,
-    name: []const u8,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-) *std.Build.Module {
-    const module = b.addModule(name, .{
-        .root_source_file = b.path("./src/pgzx/c.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // Internal C headers
-    module.addIncludePath(b.path("./src/pgzx/c/include/"));
-
-    // Postgres Headers
-    module.addIncludePath(.{
-        .cwd_relative = pgbuild.getIncludeServerDir(),
-    });
-    module.addIncludePath(.{
-        .cwd_relative = pgbuild.getIncludeDir(),
-    });
-    return module;
-}
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -50,15 +24,42 @@ pub fn build(b: *std.Build) void {
         .unit = b.step("unit", "Run pgzx unit tests"),
     };
 
-    // pgzx_pgsys module: C bindings to Postgres
-    const pgzx_pgsys = createPgsysModule(b, pgbuild, "pgzx_pgsys", target, optimize);
-    {
-        pgzx_pgsys.addLibraryPath(.{
+    // c_translated module: C bindings to Postgres via translate-c
+    // This replaces the old @cImport approach which is being deprecated
+    const c_translated = blk: {
+        const translate_c = b.addTranslateC(.{
+            .root_source_file = b.path("./src/pgzx/c/include/headers.h"),
+            .target = target,
+            .optimize = optimize,
+        });
+
+        translate_c.addIncludePath(b.path("./src/pgzx/c/include/"));
+
+        translate_c.addIncludePath(.{
+            .cwd_relative = pgbuild.getIncludeServerDir(),
+        });
+        translate_c.addIncludePath(.{
+            .cwd_relative = pgbuild.getIncludeDir(),
+        });
+
+        const module = translate_c.createModule();
+
+        // Internal C headers
+        module.addIncludePath(b.path("./src/pgzx/c/include/"));
+
+        // Postgres Headers
+        module.addIncludePath(.{
+            .cwd_relative = pgbuild.getIncludeServerDir(),
+        });
+        module.addIncludePath(.{
+            .cwd_relative = pgbuild.getIncludeDir(),
+        });
+        module.addLibraryPath(.{
             .cwd_relative = pgbuild.getLibDir(),
         });
 
         // libpq support
-        pgzx_pgsys.addCSourceFiles(.{
+        module.addCSourceFiles(.{
             .files = &[_][]const u8{
                 "./src/pgzx/c/libpqsrv.c",
             },
@@ -67,26 +68,27 @@ pub fn build(b: *std.Build) void {
                 "-I", pgbuild.getIncludeServerDir(),
             },
         });
-        pgzx_pgsys.linkSystemLibrary("pq", .{});
-    }
+        module.linkSystemLibrary("pq", .{});
 
-    const pgzx_pgsys_host = createPgsysModule(b, pgbuild, "pgzx_pgsys_host", b.graph.host, optimize);
+        b.modules.put(b.dupe("c_translated"), module) catch @panic("OOM");
+
+        break :blk module;
+    };
 
     // codegen
     // The codegen produces Zig files that are imported as modules by pgzx.
     const node_tags_src = blk: {
-        const gennodetags_module = b.addModule("gennodetags", .{
+        const tool_module = b.createModule(.{
             .root_source_file = b.path("./tools/gennodetags/main.zig"),
             .target = b.graph.host,
             .link_libc = true,
         });
-        gennodetags_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeServerDir() });
-        gennodetags_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeDir() });
-        gennodetags_module.addImport("pgzx_pgsys", pgzx_pgsys_host);
+        tool_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeServerDir() });
+        tool_module.addIncludePath(.{ .cwd_relative = pgbuild.getIncludeDir() });
 
         const tool = b.addExecutable(.{
             .name = "gennodetags",
-            .root_module = gennodetags_module,
+            .root_module = tool_module,
         });
 
         const tool_step = b.addRunArtifact(tool);
@@ -94,18 +96,18 @@ pub fn build(b: *std.Build) void {
     };
 
     // pgzx: main project module.
-    // This module re-exports pgzx_pgsys, other generated modules, and utility functions.
+    // This module re-exports c_translated, other generated modules, and utility functions.
     const pgzx = blk: {
         const module = b.addModule("pgzx", .{
             .root_source_file = b.path("./src/pgzx.zig"),
             .target = target,
             .optimize = optimize,
         });
-        module.addImport("pgzx_pgsys", pgzx_pgsys);
+        module.addImport("c_translated", c_translated);
         module.addAnonymousImport("gen_node_tags", .{
             .root_source_file = node_tags_src,
             .imports = &.{
-                .{ .name = "pgzx_pgsys", .module = pgzx_pgsys },
+                .{ .name = "c_translated", .module = c_translated },
             },
         });
 
@@ -164,12 +166,12 @@ pub fn build(b: *std.Build) void {
 
         tests.lib.root_module.addIncludePath(b.path("./src/pgzx/c/include/"));
 
-        tests.lib.root_module.addImport("pgzx_pgsys", pgzx_pgsys);
+        tests.lib.root_module.addImport("c_translated", c_translated);
         tests.lib.root_module.addImport("pgzx", pgzx);
         tests.lib.root_module.addAnonymousImport("gen_node_tags", .{
             .root_source_file = node_tags_src,
             .imports = &.{
-                .{ .name = "pgzx_pgsys", .module = pgzx_pgsys },
+                .{ .name = "c_translated", .module = c_translated },
             },
         });
 
@@ -197,7 +199,7 @@ pub fn build(b: *std.Build) void {
             "zig",
             "build",
         });
-        build_cmd.cwd = b.path(b.pathJoin(&.{"examples", example}));
+        build_cmd.cwd = b.path(b.pathJoin(&.{ "examples", example }));
         examples_step.dependOn(&build_cmd.step);
     }
 }

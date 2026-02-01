@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const pg = @import("pgzx_pgsys").pg;
+const pg = @import("c_translated");
 
 const intr = @import("interrupts.zig");
 const elog = @import("elog.zig");

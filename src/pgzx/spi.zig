@@ -1,5 +1,5 @@
 const std = @import("std");
-const pg = @import("pgzx_pgsys").pg;
+const pg = @import("c_translated");
 
 const meta = @import("meta.zig");
 const mem = @import("mem.zig");
