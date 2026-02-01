@@ -1,0 +1,5 @@
+# test_hsearch_c extension
+comment = 'C-based test for hsearch.h'
+default_version = '0.1'
+module_pathname = '$libdir/test_hsearch_c'
+relocatable = true

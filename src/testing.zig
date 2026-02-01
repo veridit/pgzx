@@ -10,8 +10,11 @@ comptime {
         pgzx.collections.list.TestSuite_PointerList,
         pgzx.collections.slist.TestSuite_SList,
         pgzx.collections.dlist.TestSuite_DList,
-        // TODO: HTab tests crash on macOS arm64 - needs investigation
-        // The crash occurs during hash_search() when calling entry methods
+        // HTab tests are disabled on macOS due to symbol collision with BSD hsearch.
+        // macOS's libSystem exports hash_create/hash_destroy with different signatures,
+        // and Zig's linker uses two-level namespace which binds to libSystem instead
+        // of PostgreSQL. See: https://github.com/xataio/pgzx/issues/XXX
+        // Workaround: Build with clang using -bundle -bundle_loader $(pg_config --bindir)/postgres
         // pgzx.collections.htab.TestSuite_HTab,
         pgzx.meta.TestSuite_Meta,
         pgzx.mem.TestSuite_Mem,

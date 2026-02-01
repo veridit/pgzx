@@ -398,6 +398,17 @@ pre-commit run --all-files
 
 6. **Zig Version**: Project tracks Zig master branch. Use the Nix dev shell to ensure correct version (currently 0.14.0).
 
+7. **macOS HTab/Hash Table Crash**: On macOS, the `pgzx.HTab` wrapper may crash due to symbol collision with BSD hsearch functions. macOS's `libSystem` exports `hash_create`, `hash_destroy`, and `hash_search` with different signatures than PostgreSQL's internal functions. Zig's linker uses two-level namespace by default, which can bind these symbols to libSystem instead of PostgreSQL. 
+   
+   **Symptoms**: Server crashes (SIGSEGV) when calling `hash_create()` or `hash_get_num_entries()`.
+   
+   **Workaround for C extensions**: Build with clang using:
+   ```bash
+   clang -bundle -bundle_loader $(pg_config --bindir)/postgres ...
+   ```
+   
+   **Status**: HTab tests are disabled on macOS. The Zig build system needs to support `-flat_namespace` or bundle linking for a proper fix.
+
 ## Useful Links
 
 - [pgzx Documentation](https://xataio.github.io/pgzx/#docs.pgzx)
