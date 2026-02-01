@@ -57,7 +57,7 @@ in {
       pkgs.pkg-config
 
       pkgs.zigpkgs.stable
-      pkgs.zls
+      # zls removed - install separately if needed
     ];
 
   shellHook = ''

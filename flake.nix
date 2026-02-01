@@ -10,14 +10,11 @@
       url = "github:mitchellh/zig-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    zls = {
-      url = "github:zigtools/zls";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.zig-overlay.follows = "zig-overlay";
-    };
 
+    # Pin pre-commit-hooks to a version compatible with our nixpkgs
+    # Using a commit from early 2024 that works with nixpkgs 24.05
     pre-commit-hooks-nix = {
-      url = "github:cachix/pre-commit-hooks.nix";
+      url = "github:cachix/pre-commit-hooks.nix/0db2e67ee49910adfa13010e7f012149660af7f0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -27,7 +24,7 @@
     nixpkgs,
     ...
   }: let
-    zig-stable = "0.14.0";
+    zig-stable = "0.15.2";
 
     zig-overlay = _final: prev: let
       orig = inputs.zig-overlay.packages.${prev.system};
@@ -37,12 +34,6 @@
         // {
           stable = orig.${zig-stable};
         };
-    };
-
-    zls-overlay = final: prev: {
-      zls = inputs.zls.packages.${prev.system}.zls.overrideAttrs (_oldAttrs: {
-        nativeBuildInputs = [final.zigpkgs.stable];
-      });
     };
   in
     inputs.parts.lib.mkFlake {inherit inputs;} {
@@ -56,11 +47,9 @@
       flake.overlays = rec {
         default = nixpkgs.lib.composeManyExtensions [
           zigpkgs
-          zls
           pgzx_scripts
         ];
         zigpkgs = zig-overlay;
-        zls = zls-overlay;
         pgzx_scripts = _final: prev: {
           pgzx_scripts = self.packages.${prev.system}.pgzx_scripts;
         };
@@ -86,7 +75,6 @@
           config.allowBroken = true;
           overlays = [
             zig-overlay
-            zls-overlay
           ];
         };
 

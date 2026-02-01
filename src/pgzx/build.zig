@@ -516,7 +516,14 @@ pub fn addRegress(b: *Build, options: PGRegressOptions) *RunExec {
         root_dir,
     });
 
-    const lib_dir = b.std_build.getInstallPath(.lib, "postgresql");
+    // Use the actual package lib dir from pg_config for --libdir
+    const pg_home = b.getPGHome();
+    const package_lib_dir = b.getPackageLibDir();
+    const is_deploy = std.mem.eql(u8, b.std_build.install_prefix, pg_home);
+    const lib_dir = if (is_deploy or std.mem.startsWith(u8, package_lib_dir, pg_home))
+        package_lib_dir
+    else
+        b.std_build.install_prefix;
     runner.addArgs(&[_][]const u8{ "--libdir", lib_dir });
 
     if (options.db_host) |db_host| {
@@ -565,9 +572,17 @@ pub const RunTestsOptions = struct {
 ///  CREATE FUNCTION run_tests() RETURNS INTEGER AS '\''/path/to/lib{name}.dylib'\'' LANGUAGE C IMMUTABLE;
 ///  SELECT run_tests();
 pub fn addRunTests(b: *Build, options: RunTestsOptions) *RunExec {
-    const lib_dir = b.std_build.getInstallPath(.lib, "postgresql");
+    // Use the actual package lib dir from pg_config, same as addInstallExtensionLibArtifact
+    const pg_home = b.getPGHome();
+    const package_lib_dir = b.getPackageLibDir();
+    const is_deploy = std.mem.eql(u8, b.std_build.install_prefix, pg_home);
+    const target_lib_dir = if (is_deploy or std.mem.startsWith(u8, package_lib_dir, pg_home))
+        package_lib_dir
+    else
+        b.std_build.install_prefix;
+
     const lib_filename = std.fmt.allocPrint(b.std_build.allocator, "{s}{s}", .{ options.name, b.options.target.result.dynamicLibSuffix() }) catch @panic("OOM");
-    const lib_path = b.std_build.pathJoin(&[_][]const u8{ lib_dir, lib_filename });
+    const lib_path = b.std_build.pathJoin(&[_][]const u8{ target_lib_dir, lib_filename });
 
     const sql = std.fmt.allocPrint(
         b.std_build.allocator,

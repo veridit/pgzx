@@ -123,4 +123,8 @@ fi
 if [ -n "$shared_preload_libraries" ]; then
 	echo "shared_preload_libraries='$shared_preload_libraries'" >>"$data_dir/postgresql.conf"
 fi
+
+# Set dynamic_library_path to include PG_HOME/lib for extension loading
+# This is needed because nix postgres doesn't have $libdir set correctly
+echo "dynamic_library_path='\$libdir:$PG_HOME/lib'" >>"$data_dir/postgresql.conf"
 # echo "max_prepared_transactions=100" >> ${datadir}/postgresql.conf

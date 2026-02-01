@@ -10,10 +10,8 @@ comptime {
         pgzx.collections.list.TestSuite_PointerList,
         pgzx.collections.slist.TestSuite_SList,
         pgzx.collections.dlist.TestSuite_DList,
-        // NOTE: HTab tests disabled due to crashes on macOS arm64.
-        // Direct calls to pg.hash_search() work fine (tested in testGetOrPutEntryInt),
-        // but wrapper methods crash. Root cause not yet identified - likely related
-        // to Zig's @cImport handling of HTAB structures on arm64.
+        // TODO: HTab tests crash on macOS arm64 - needs investigation
+        // The crash occurs during hash_search() when calling entry methods
         // pgzx.collections.htab.TestSuite_HTab,
         pgzx.meta.TestSuite_Meta,
         pgzx.mem.TestSuite_Mem,
