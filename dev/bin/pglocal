@@ -63,14 +63,17 @@ cp_direct_files() {
 		mkdir -p "$target" && chmod u+w "$target" || return 1
 	done
 
-	# # copy the actual files only
+	# Ensure existing files are writable before overwriting
+	chmod -f u+w "$dest_dir"/* 2>/dev/null || true
+
+	# copy the actual files only
 	find "$src_dir" -maxdepth 1 -type f | while read -r file; do
 		cp "$file" "$dest_dir" || return 1
 	done
 
 	# create symlinks
 	find "$src_dir" -maxdepth 1 -type l | while read -r link; do
-		ln -s "$(realpath "$link")" "$dest_dir/$(basename "$link")" || return 1
+		ln -sf "$(realpath "$link")" "$dest_dir/$(basename "$link")" || return 1
 	done
 }
 
@@ -88,6 +91,9 @@ cp_recursive() {
 		target="${dest_dir}/${dir}"
 		mkdir -p "$target" && chmod u+w "$target" || return 1
 	done
+
+	# Ensure existing files are writable before overwriting
+	find "$dest_dir" -type f -exec chmod -f u+w {} \; 2>/dev/null || true
 
 	# copy the actual files only
 	find "$src_dir" -type f -printf '%P\n' | while read -r file; do
@@ -141,7 +147,5 @@ cp_recursive "$new_install_dir/share/postgresql" "$($PG_CONFIG --sharedir)"
 
 chmod -R +w "$new_install_dir"
 
-# link outdir/default if not exists
-if [ ! -e "$outdir/default" ]; then
-	ln -s "$new_install_dir" "$outdir/default"
-fi
+# link outdir/default (force overwrite if exists)
+ln -sfn "$new_install_dir" "$outdir/default"
