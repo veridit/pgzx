@@ -34,8 +34,10 @@ for version in $PG_VERSIONS; do
 	rm -rf out/default
 
 	# Kill any existing postgres on port 5432
-	pkill -f "postgres.*5432" 2>/dev/null || true
-	sleep 1
+	pkill -f "postgres.*-D.*var/postgres" 2>/dev/null || true
+	# Also try killing by port binding
+	lsof -ti:5432 | xargs kill -9 2>/dev/null || true
+	sleep 2
 
 	# Run tests in the version-specific nix shell
 	# shellcheck disable=SC2016
