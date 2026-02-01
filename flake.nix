@@ -2,8 +2,11 @@
   description = "Description for the project";
 
   inputs = {
-    # Use nixpkgs 24.11 for stable PG16/17 support
+    # Use nixpkgs 24.11 for stable packages
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+
+    # Use nixpkgs unstable for PG18 (not available in 24.11)
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     parts.url = "github:hercules-ci/flake-parts";
 
@@ -70,8 +73,15 @@
         config,
         lib,
         pkgs,
+        system,
         ...
-      }: {
+      }: let
+        # Import unstable nixpkgs for PG18
+        pkgs-unstable = import inputs.nixpkgs-unstable {
+          inherit system;
+          config.allowUnfree = true;
+        };
+      in {
         nixpkgs = {
           config.allowBroken = true;
           overlays = [
@@ -149,7 +159,9 @@
           # PostgreSQL version-specific shells
           pg16 = mkShell (mkDevShell pkgs.postgresql_16_jit);
           pg17 = mkShell (mkDevShell pkgs.postgresql_17_jit);
-          pg18 = mkShell (mkDevShell (pkgs.postgresql_18 or pkgs.postgresql_17_jit));
+          # PG18 comes from nixpkgs-unstable since it's not in 24.11
+          # Using non-JIT variant because postgresql_18_jit lacks dev output
+          pg18 = mkShell (mkDevShell pkgs-unstable.postgresql_18);
 
           # Create development shell with C tools and dependencies to build Postgres locally.
           debug = mkShell (user_shell

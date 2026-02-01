@@ -5,6 +5,15 @@
   ...
 }: let
   pgVersion = builtins.head (builtins.match "([0-9]+).*" postgresql.version);
+
+  # pg_config location varies by nixpkgs version:
+  # - nixpkgs 24.11 and earlier: in postgresql.dev/bin/pg_config
+  # - nixpkgs unstable (2025+): separate postgresql.pg_config derivation
+  pgConfigBin =
+    if postgresql ? pg_config
+    then "${postgresql.pg_config}/bin/pg_config"
+    else "${postgresql.dev}/bin/pg_config";
+
   menu = ''
 
     PGZX development shell (PostgreSQL ${pgVersion})
@@ -73,9 +82,9 @@ in {
     # the NIX_PGLIBDIR environment variable.
     export NIX_PGLIBDIR=$PG_HOME/lib
 
-    # Use the nix-provided pg_config (from -dev package) for building extensions.
+    # Use the nix-provided pg_config for building extensions.
     # The local $PG_HOME/bin/pg_config is a placeholder that doesn't have dev info.
-    export PG_CONFIG=${postgresql.dev}/bin/pg_config
+    export PG_CONFIG=${pgConfigBin}
 
     alias root='cd $PRJ_ROOT'
 
